@@ -16,7 +16,8 @@ Sistem ini memiliki 2 bagian utama:
 - dispatcher.c sebagai pengiriman reguler dan monitoring oleh user
 
 a. Mengunduh file delivery_order.csv lalu membaca seluruh data dari CSV dan menyimpan ke shared memory.
-mengunduh file:
+
+Mengunduh file
 
       if (!file_exists(CSV_FILENAME)) {
         printf("File %s tidak ditemukan. Mengunduh...\n", CSV_FILENAME);
