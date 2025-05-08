@@ -162,8 +162,8 @@ Bisa menjalankan perintah list untuk melihat semua order nama disertai status
     printf("Listing all orders:\n");
     for (int i = 0; i < shm->order_count; i++) {
         printf("Name: %s, Status: %s\n", shm->orders[i].name, shm->orders[i].status);
-    }
-}
+          }
+      } 
             
             
 
