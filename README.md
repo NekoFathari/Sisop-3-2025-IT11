@@ -331,3 +331,137 @@ printf("Stats dikirim ke client dengan port %d\n", client_port);
 ....
 ```
 ### SOAL 4
+system.c
+Header & Inisialisasi
+
+```#include "shm_common.h"
+#include <stdbool.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+```
+
+Mengimpor definisi struktur dari `shm_common.h`.
+Inisialisasi mutex global untuk menjaga data shared memory tetap aman saat diakses banyak thread.
+``` cleanup()
+
+void cleanup() {
+    key_t system_key = get_system_key();
+    int shmid = shmget(system_key, sizeof(struct SystemData), 0666);
+    if (shmid != -1) {
+        shmctl(shmid, IPC_RMID, NULL);
+    }
+}
+```
+- Menghapus shared memory `SystemData` dari sistem saat program keluar.
+- Digunakan saat `exit()` atau saat menerima sinyal `SIGINT/SIGTERM`.
+ handle_signal(int sig)
+```
+void handle_signal(int sig) {
+    cleanup();
+    exit(0);
+}
+```
+
+ Fungsi handler untuk menangani sinyal sistem seperti `Ctrl+C`.
+ Memanggil `cleanup()` sebelum keluar.
+ 
+      generate_dungeon(struct SystemData *system_data)
+Menghasilkan dungeon baru dengan parameter random (level, atk, exp, dll). Disimpan di array `system_data->dungeons`.
+Dungeon memiliki nama yang diambil dari daftar dungeon preset.
+ Menggunakan mutex untuk menjaga konsistensi saat menambahkan dungeon.
+
+       show_hunter_info(struct SystemData *system_data)
+Menampilkan seluruh data hunter:
+- Username
+- Level, EXP, ATK, HP, DEF
+- Status banned
+Berguna bagi admin untuk memonitor pemain.
+
+         show_dungeon_info(struct SystemData *system_data)
+Menampilkan seluruh dungeon yang telah dibuat:
+- Nama, level minimal, reward EXP, stats dungeon, dll.
+
+        ban_hunter(struct SystemData *system_data)
+Menerima username hunter. Jika ditemukan, toggle `banned` (ban/unban). Mutex digunakan untuk menjaga konsistensi update.
+       
+       reset_hunter(struct SystemData *system_data)
+Mengatur ulang hunter ke status awal:
+- Level 1, EXP 0, ATK 10, HP 100, DEF 5
+Digunakan jika hunter bermasalah atau ingin memulai ulang.
+
+        notification_thread(void *arg)
+Thread yang berjalan terus-menerus. Tiap 3 detik, menggilir index dungeon aktif (`current_notification_index`) untuk sistem notifikasi.
+
+      main()
+Fungsi utama program admin.
+Melakukan:
+
+- Setup sinyal dan `atexit()`
+- Alokasi shared memory `SystemData`
+- Inisialisasi nilai default
+- Menjalankan thread notifikasi
+- Menampilkan menu utama admin secara loop:
+  1. Tampilkan hunter
+  2. Tampilkan dungeon
+  3. Generate dungeon baru
+  4. Ban/unban hunter
+  5. Reset hunter
+  6. Keluar program
+
+### hunter.c
+Penjelasan Lengkap Kode Hunter Client System
+Header & Struktur
+```
+#include "shm_common.h"
+#include <stdbool.h>
+```
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+- Header `shm_common.h` digunakan untuk akses struktur data bersama.
+- Mutex digunakan untuk menjaga sinkronisasi saat beberapa thread/proses mengakses shared memory.
+
+        struct HunterData
+Struktur ini menyimpan data karakter hunter seperti username, level, EXP, stat, status banned, dan pengaturan notifikasi.
+
+       sync_hunter_stats()
+Melakukan sinkronisasi stat hunter yang aktif ke sistem global `SystemData` agar data tetap konsisten setelah perubahan (raid, battle, dll).
+
+      show_available_dungeons()
+Menampilkan dungeon yang bisa diakses berdasarkan level hunter.
+Menunggu input enter agar user bisa membaca info sebelum lanjut.
+
+       raid_dungeon()
+- Menampilkan dungeon yang bisa diserang.
+- Memberikan reward (exp, atk, hp, def).
+- Mengecek apakah level naik setelah exp cukup.
+- Menghapus dungeon dari sistem setelah diserang.
+- Update sistem global melalui `sync_hunter_stats()`.
+
+        battle_hunter()
+- Menampilkan daftar hunter lain untuk PVP.
+- Jika menang, stat musuh diakuisisi dan musuh dihapus.
+- Jika kalah, stat kita diberikan ke musuh dan kita keluar dari sistem.
+- Menjaga sinkronisasi melalui mutex dan `sync_hunter_stats()`.
+
+         notification_handler()
+- Thread yang menampilkan notifikasi dungeon aktif jika level hunter memenuhi syarat.
+- Berjalan setiap 3 detik saat `notification_enabled` aktif.
+
+        notification()
+Mengaktifkan atau menonaktifkan notifikasi dungeon dan membuat thread `notification_handler()` jika aktif.
+ 
+       main()
+- Menghubungkan hunter ke shared memory sistem.
+- Menyediakan menu utama:
+  1. Register
+  2. Login
+  3. Exit
+- Saat login, hunter dapat mengakses:
+  1. List Dungeon
+  2. Raid
+  3. Battle
+  4. Notification
+  5. Exit
+- Data hunter akan dihapus dari shared memory saat logout.
