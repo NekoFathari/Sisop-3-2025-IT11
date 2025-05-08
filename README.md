@@ -78,5 +78,94 @@ Menyimpan ke Shared Memory
     }
 
 
+b. Pengiriman bertipe express
+RushGo disini memakai 3 agent ada agent A,B dan C. Agent akan secara otomatis mencari order bertipe express yang belum dikirim. Mengambil dan mengirimkannya tanpa user. lalu akan di catat dalam log.
+
+            
+        if (strcmp(shm->orders[shm->order_count].type, "Express") == 0) {
+            char agent = 'A' + (rand() % 3); // A, B, atau C
+            strcpy(shm->orders[shm->order_count].status, "Delivered");
+            fprintf(log_file, "%s [AGENT %c] Express package delivered to %s in %s\n",
+                    timestamp,
+                    agent,
+                    shm->orders[shm->order_count].name,
+                    shm->orders[shm->order_count].address);
+        }
+
+        shm->order_count++;
+    }
+
+lalu dicatat dalam log 
+
+            char timestamp[32];
+            get_timestamp(timestamp, sizeof(timestamp));
+
+
+c. Pengiriman bertipe reguler
+Disini pengirimannya dilakukan dengan agent <user>. User disini dapat mengirim dengan menggunakan perintah dispatcher.
+
+Pengiriman dengan reguler
+
+            if (strcmp(argv[1], "-deliver") == 0 && argc == 3) {
+        const char* recipient = argv[2];
+        int found = 0;
+
+        for (int i = 0; i < shm->order_count; i++) {
+            if (strcmp(shm->orders[i].name, recipient) == 0 &&
+                strcmp(shm->orders[i].type, "Reguler") == 0 &&
+                strcmp(shm->orders[i].status, "Pending") == 0) {
+
+                strcpy(shm->orders[i].status, "Delivered");
+                log_delivery("Reguler", shm->orders[i].name, shm->orders[i].address);
+                printf("Reguler order for '%s' marked as Delivered.\n", recipient);
+                found = 1;
+                break;
+            }
+        }
+
+d. Mengecek Status pesanan
+
+            void check_status(SharedMemory *shm, const char* name) {
+    for (int i = 0; i < shm->order_count; i++) {
+        if (strcmp(shm->orders[i].name, name) == 0) {
+            if (strcmp(shm->orders[i].status, "Delivered") == 0) {
+                FILE *log_file = fopen("delivery.log", "r");
+                if (!log_file) {
+                    perror("Gagal membuka delivery.log");
+                    return;
+                }
+
+                char line[256];
+                char agent_name[100] = "UNKNOWN";
+                while (fgets(line, sizeof(line), log_file)) {
+                    if (strstr(line, name)) {
+                        char *start = strstr(line, "[AGENT ");
+                        if (start) {
+                            start += 7; // lewati "[AGENT "
+                            char *end = strchr(start, ']');
+                            if (end) {
+                                *end = '\0';
+                                strncpy(agent_name, start, sizeof(agent_name));
+                                break;
+                            }
+                        }
+                    }
+                }
+                fclose(log_file);
+
+                printf("Status for %s: Delivered by Agent %s\n", name, agent_name);
+
+e. Melihat daftar semua pesanan
+Bisa menjalankan perintah list untuk melihat semua order nama disertai status
+
+            void list_orders(SharedMemory *shm) {
+    printf("Listing all orders:\n");
+    for (int i = 0; i < shm->order_count; i++) {
+        printf("Name: %s, Status: %s\n", shm->orders[i].name, shm->orders[i].status);
+    }
+}
+            
+            
+
 ### SOAL 3
 ### SOAL 4
