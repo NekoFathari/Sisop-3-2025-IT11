@@ -168,4 +168,166 @@ Bisa menjalankan perintah list untuk melihat semua order nama disertai status
             
 
 ### SOAL 3
+
+Pada tahap ini terdapat 8 point yang perlu dibuat dalam menyelesaikan permasalahan ini.
+
+a. dungeon.c dan player.c berjalan dengan komunikasi RPC, dan server dapat menjalankan banyak client dalam 1 server.
+
+#### dungeon.C
+```
+// Library yang perlu digunakan
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdbool.h>
+....
+
+int main(){
+    ...
+    // sesuai yang ada di modul
+    pthread_mutex_init(&client_lock, NULL); // Inisialisasi mutex
+
+    if(( servernya = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    alamat.sin_family = AF_INET;
+    alamat.sin_addr.s_addr = INADDR_ANY;
+    alamat.sin_port = htons(PORT);
+
+    if(bind(servernya, (struct sockaddr *)&alamat, sizeof(alamat)) < 0){
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if(listen(servernya, 3) < 0){
+        perror("listen failed");
+        exit(EXIT_FAILURE);
+    }
+    ...
+
+    while(1){
+        printf("Menunggu koneksi...\n");
+        int* new_socket = (int*)malloc(sizeof(int));
+        if ((*new_socket = accept(servernya, (struct sockaddr*)&alamat, (socklen_t*)&addrlen)) < 0) {
+            perror("accept failed");
+            free(new_socket);
+            continue; // lanjut ke iterasi berikutnya
+        }
+        printf("Koneksi diterima\n");
+
+        // Buat thread baru untuk menangani client
+        pthread_t thread_id;
+        if (pthread_create(&thread_id, NULL, handle_client, new_socket) != 0) {
+            perror("pthread_create failed");
+            close(*new_socket);
+            free(new_socket);
+            continue; // lanjut ke iterasi berikutnya
+        }
+
+        // Detach thread agar sumber daya dibebaskan setelah selesai
+        pthread_detach(thread_id);
+    }
+}
+
+```
+
+#### dungeon.c (dalam handle banyak client)
+```
+void handle_client(...){
+...
+while (1) {
+    int pilihan_dari_client;
+    int bytes_read = read(socketnya, &pilihan_dari_client, sizeof(pilihan_dari_client));
+    if (bytes_read < 0) {
+        perror("read failed");
+        break; // Keluar dari perulangan jika terjadi error
+    }
+    if (bytes_read == 0) {
+        printf("Client dengan port %d terputus.\n", client_port);
+        break; // Keluar dari perulangan jika client menutup koneksi
+    }
+...
+}
+```
+
+### player.c 
+```
+int main(){
+    ....
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    if (inet_pton(AF_INET, IP, &serv_addr.sin_addr) <= 0) {
+        perror("Invalid address/ Address not supported");
+        exit(EXIT_FAILURE);
+    }
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        // Jika koneksi gagal, kita bisa menampilkan pesan error
+        loading(20);
+        fprintf(stderr, "\033[1;31m");
+        perror("Connection failed");
+        fprintf(stderr, "\033[0m");
+
+        exit(EXIT_FAILURE);
+    }
+    ....
+}
+```
+
+b. Menampilkan main menu, dan listener hubungan dungeon.c dan player.c
+
+#### player.C
+```
+void logo(){
+printf("\033[H\033[J");
+printf("██████╗░██╗░░░██╗███╗░░██╗░██████╗░███████╗░█████╗░███╗░░██╗\n");
+printf("██╔══██╗██║░░░██║████╗░██║██╔════╝░██╔════╝██╔══██╗████╗░██║\n");
+printf("██║░░██║██║░░░██║██╔██╗██║██║░░██╗░█████╗░░██║░░██║██╔██╗██║\n");
+printf("██║░░██║██║░░░██║██║╚████║██║░░╚██╗██╔══╝░░██║░░██║██║╚████║\n");
+printf("██████╔╝╚██████╔╝██║░╚███║╚██████╔╝███████╗╚█████╔╝██║░╚███║\n");
+printf("╚═════╝░░╚═════╝░╚═╝░░╚══╝░╚═════╝░╚══════╝░╚════╝░╚═╝░░╚══╝\n\n");
+}
+
+void menu(){
+    printf("\033[H\033[J");
+    logo();
+    printf("1. Show Player Stats\n");
+    printf("2. Inventory\n");
+    printf("3. Shop (Buy Weapons)\n");
+    printf("4. Battle\n");
+    printf("5. Exit Game\n\n");
+    printf(RED "   Choose an option: " RESET);
+
+    int pilihanku;
+    scanf("%d", &pilihanku);
+    switch (pilihanku) {
+        ....
+    }
+
+}    
+```
+
+c. Menampilkan status check 
+### dungeon.c (proses background)
+```
+....
+if (send(socketnya, &player[nomor_player], sizeof(player[nomor_player]), 0) <= 0) {
+    perror("send failed (client stats)");
+    break; // Keluar dari perulangan jika terjadi error
+}
+printf("Stats dikirim ke client dengan port %d\n", client_port);
+....
+```
 ### SOAL 4
