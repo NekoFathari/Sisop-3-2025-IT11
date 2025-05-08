@@ -320,7 +320,7 @@ void menu(){
 ```
 
 c. Menampilkan status check 
-### dungeon.c (proses background)
+#### dungeon.c (proses background)
 ```
 ....
 if (send(socketnya, &player[nomor_player], sizeof(player[nomor_player]), 0) <= 0) {
@@ -330,6 +330,371 @@ if (send(socketnya, &player[nomor_player], sizeof(player[nomor_player]), 0) <= 0
 printf("Stats dikirim ke client dengan port %d\n", client_port);
 ....
 ```
+
+#### player.c
+```
+....
+// Terima data stats dari server
+    PlayerStats stats;
+    if (recv(sock, &stats, sizeof(stats), 0) <= 0) {
+        perror("Receive failed (stats)");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+....
+```
+
+d. Weapon Shop
+#### shop.H
+```
+....
+typedef struct {
+    ....
+} Senjata;
+
+Senjata senjata[5] = {
+    ....
+};
+
+void beli_senjata(....) {
+....
+```
+
+#### dungeon.C
+```
+....
+beli_senjata(...);
+....
+```
+
+#### player.c
+```
+....
+if (recv(sock, senjata, sizeof(senjata), 0) <= 0) {
+    .....
+    }
+// Terima data uang dari server
+int uang;
+if (recv(sock, &uang, sizeof(uang), 0) <= 0) {
+    ....
+    }
+....
+
+int pilihan_senjata;
+scanf("%d", &pilihan_senjata);
+
+if (pilihan_senjata < 0 || pilihan_senjata > 5) {
+    printf("Pilihan tidak valid. Kembali ke menu.\n");
+    return;
+}
+if (send(sock, &pilihan_senjata, sizeof(pilihan_senjata), 0) < 0) {
+....
+}
+....
+```
+
+e. Inventory
+#### dungeon.c 
+```
+....
+if (send(socketnya, &inv[nomor_player], sizeof(inv[nomor_player]), 0) <= 0) {
+    perror("send failed (client inventory)");
+    break; // Keluar dari perulangan jika terjadi error
+}
+....
+bool ada_item = false;
+// print isinya
+for (int i = 0; i < 20; i++) {
+    if (inv[nomor_player][i].id != 0) {
+        ada_item = true;
+        ....
+    }
+}
+
+// Kita dapatkan respon dari client mau pilih senjata mana buat dipasang
+// Terima pilihan senjata dari client
+int pilihan_senjata;
+if (recv(socketnya, &pilihan_senjata, sizeof(pilihan_senjata), 0) <= 0) {
+    .....
+}
+if(!ada_item){
+    .....
+} else {
+    ....
+}
+
+if (pilihan_senjata < 0 || pilihan_senjata >= sizeof(inv[nomor_player]) / sizeof(Inventory)) {
+    .....
+}
+
+if (pilihan_senjata == 0) {
+    ......
+}
+
+// Cek apakah client memiliki barang tersebut di Inventory
+for (int i = 0; i < 20; i++) {
+    if (inv[nomor_player][i].id == pilihan_senjata) {
+        // reset statsnya kepada base stats
+        .....
+
+        // Pasangkan ke statsnya
+        ......
+
+        char msg[100] = {0};
+        snprintf(msg, sizeof(msg) ,"Senjata %s berhasil di pasang\n", inv[nomor_player][i].nama);
+        if (send(socketnya, msg, sizeof(msg), 0) <= 0) {
+            ......
+        }
+        printf("Client memasang senjata dengan id %d\n", inv[nomor_player][i].id);
+        break; // Keluar dari perulangan jika terjadi error
+    }
+}
+....
+```
+
+#### player.c  
+```
+....
+// Terima data inventory dari server
+Inventory inventory[20];
+if (recv(sock, &inventory, sizeof(inventory), 0) <= 0) {
+    .....
+}
+
+.....
+
+int slot;
+scanf("%d", &slot);
+if (slot < 0 || slot > 20) {
+    .....
+}
+if (send(sock, &slot, sizeof(slot), 0) < 0) {
+    ......
+}
+// Terima response
+char response[100];
+if (recv(sock, response, sizeof(response), 0) <= 0) {
+    ....
+}
+....
+```
+
+f. Enemy Battle dan g. Other logic
+#### dungeon.c 
+```
+....
+
+//randomize musuh dulu
+int random_musuh = rand() % 10;
+if (random_musuh >= 3) {
+    random_musuh = rand() % 3; // Lebih sering memilih 0, 1, atau 2
+}
+musuhnya musuh_terpilih = musuh[random_musuh];
+......    
+// udah dapet musuhnya healthnya kita random dari min_darah ke max_darah
+int health_musuh = (rand() % (musuh_terpilih.max_darah - musuh_terpilih.min_darah + 1)) + musuh_terpilih.min_darah;
+
+// Karena udah dapet musuh, dan healthnya, Cus kita kirim ke client
+if (send(socketnya, &musuh_terpilih, sizeof(musuh_terpilih), 0) <= 0) {
+    ......
+}
+if (send(socketnya, &health_musuh, sizeof(health_musuh), 0) <= 0) {
+    ......
+}
+.....
+while (1) {                        
+    // Terima respon dari client, antara 1 untuk menyerang atau 2 untuk kabur
+    int pilihan_battle;
+    if (recv(socketnya, &pilihan_battle, sizeof(pilihan_battle), 0) <= 0) {
+        ......
+    }
+    // exit code
+    if (pilihan_battle == 2) {
+        printf("Client dengan port %d memilih untuk kabur\n", client_port);
+        // set health client ke 100 lagi, well reset lah
+        player[nomor_player].darah = darahnya; // Reset health player
+        break; // Keluar dari perulangan jika client memilih kabur
+    }
+    // aksi code
+    if (pilihan_battle == 1) {
+        // Dapatkan damage dari player, crit, crit_damage
+        .......
+
+        if (crit_serangnya != 0 && crit_damage_pas_serang != 0) {
+            int crit = rand() % 100;
+            if (crit < crit_serangnya) {
+                sakitnya_diserang = sakitnya_diserang + (sakitnya_diserang * crit_damage_pas_serang);
+                health_musuh -= sakitnya_diserang;
+            } else {
+                health_musuh -= sakitnya_diserang;
+            }
+        } else {
+            int random_damage_userlah = (rand() % ((int)(sakitnya_diserang * 1.2) - (int)(sakitnya_diserang * 0.7) + 1)) + (int)(sakitnya_diserang * 0.7);
+            if (random_damage_userlah > sakitnya_diserang) {
+                health_musuh -= random_damage_userlah;
+            } else {
+                health_musuh -= random_damage_userlah;
+            }
+        }
+        // kirim health musuh ke client dan kalau mati musuh random masuk, dan healthnya di random
+
+        if (health_musuh <= 0) {
+            health_musuh = 0; // Set health musuh ke 0                                
+            if (send(socketnya, &health_musuh, sizeof(health_musuh), 0) <= 0) {
+                .....
+            }
+
+            // Kirim health musuh ke client
+            int random_musuh = rand() % 10;
+            if (random_musuh >= 3) {
+                random_musuh = rand() % 3; // Lebih sering memilih 0, 1, atau 2
+            }
+            musuhnya musuh_terpilih = musuh[random_musuh];    
+            // udah dapet musuhnya healthnya kita random dari min_darah ke max_darah
+            health_musuh = (rand() % (musuh_terpilih.max_darah - musuh_terpilih.min_darah + 1)) + musuh_terpilih.min_darah;
+
+            // Karena udah dapet musuh, dan healthnya, Cus kita kirim ke client
+
+            if (send(socketnya, &musuh_terpilih, sizeof(musuh_terpilih), 0) <= 0) {
+                .......
+            }
+            if (send(socketnya, &health_musuh, sizeof(health_musuh), 0) <= 0) {
+                ......
+            }
+
+            // Tambah uang player
+            int uang_dapat = (rand() % 41) + 20; // Uang dapat antara 20 hingga 60
+            player[nomor_player].uang += uang_dapat;
+            if (send(socketnya, &uang_dapat, sizeof(uang_dapat), 0) <= 0) {
+                perror("send failed (uang dapat)");
+                break; // Keluar dari perulangan jika terjadi error
+            }
+
+            // Kirim health player ke client
+            .....
+
+            // Musuh menyerang balik
+            int damage_musuh = rand() % (musuh_terpilih.damage + 1); // Random damage antara 0 hingga damage maksimum musuh
+            player[nomor_player].darah -= damage_musuh;
+
+            // Kirim health player ke client
+            if (send(socketnya, &player[nomor_player].darah, sizeof(player[nomor_player].darah), 0) <= 0) {
+                .....
+            }
+
+            if (player[nomor_player].darah <= 0) {
+                printf("Client dengan port %d telah kalah dalam pertarungan\n", client_port);
+                player[nomor_player].darah = darahnya; // Reset health player
+                player[nomor_player].berapa_mati++; // Tambah berapa kali mati
+                printf("Health player direset ke %d dan health musuh direset ke %d\n", darahnya, health_musuh);
+                break; // Keluar dari perulangan jika player kalah
+            }
+        
+        } 
+    }
+
+....
+```
+#### player.C
+```
+....
+// Terima data musuh dari server
+    if (recv(sock, &musuhku, sizeof(musuhku), 0) <= 0) {
+        .....
+    }
+
+    // Terima health musuh dari server
+    int health_musuh_max;
+    if (recv(sock, &health_musuh_max, sizeof(health_musuh_max), 0) <= 0) {
+        .....
+    }
+
+    int health_musuh = health_musuh_max;
+    int pilihan_battle;
+
+    do {
+        ......
+        printf("%s\n", musuhku.nama);
+        if (health_musuh_max >= health_musuh) {
+            health_barwak(health_musuh, health_musuh_max);
+        }
+
+        printf("Pilih aksi (1 untuk menyerang, 2 untuk kabur): ");
+        scanf("%d", &pilihan_battle);
+
+        if (pilihan_battle < 1 || pilihan_battle > 2) {
+            .......
+        }
+
+        if (send(sock, &pilihan_battle, sizeof(pilihan_battle), 0) < 0) {
+            .......
+        }
+
+        if (pilihan_battle == 2) {
+           .......
+        }
+
+        // Terima health musuh yang diperbarui dari server
+        if (recv(sock, &health_musuh, sizeof(health_musuh), 0) <= 0) {
+            .....
+        }
+
+        if (health_musuh <= 0) {
+            printf("Musuh telah dikalahkan!\n");
+            sleep(2);
+
+            // Terima musuh yang baru dari server
+            if (recv(sock, &musuhku, sizeof(musuhku), 0) <= 0) {
+                .....
+            }
+            // Terima health musuh baru dari server
+            if (recv(sock, &health_musuh_max, sizeof(health_musuh_max), 0) <= 0) {
+               .......
+            }
+            health_musuh = health_musuh_max;
+            // Dapet notif uang
+            int uang_dapat;
+            if (recv(sock, &uang_dapat, sizeof(uang_dapat), 0) <= 0) {
+                .......
+            }
+            printf("Anda mendapatkan %d uang!\n", uang_dapat);
+            sleep(2);
+            printf("Musuh baru muncul!: %s\n", musuhku.nama);
+            sleep(2);
+        }
+
+        // Terima darah pemain yang diperbarui dari server
+        int darahku;
+        if (recv(sock, &darahku, sizeof(darahku), 0) <= 0) {
+            .......
+        }
+
+        if(darahku <= 0) {
+            .....
+            break;
+        }
+        printf("Darah Anda: (%d/%d)\n", darahku, 100);
+        sleep(2);
+
+    } while (pilihan_battle != 2);
+}
+....
+```
+
+h. Error handling
+#### player.C
+```
+....
+int menu(){
+    .....
+    default:
+    printf("\033[1;31mInvalid choice. Please try again.\033[0m\n");
+    sleep(2);
+    menu();
+}
+....
+```
+
 ### SOAL 4
 system.c
 Header & Inisialisasi
